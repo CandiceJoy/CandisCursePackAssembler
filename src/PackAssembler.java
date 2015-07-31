@@ -164,6 +164,7 @@ public class PackAssembler
 		if( path.exists() )
 		{
 			File[] files = path.listFiles();
+
 			for( int i = 0; i < files.length; i++ )
 			{
 				if( files[i].isDirectory() )
@@ -183,40 +184,20 @@ public class PackAssembler
 			throws IOException
 	{
 		URL url = new URL( fileURL );
-		HttpURLConnection httpConn = (HttpURLConnection) url.openConnection();
-		int responseCode = httpConn.getResponseCode();
+		HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+		int responseCode = connection.getResponseCode();
 
 		// always check HTTP response code first
 		if( responseCode == HttpURLConnection.HTTP_OK )
 		{
 			String fileName = "";
-			String disposition = httpConn.getHeaderField( "Content-Disposition" );
-			//String contentType = httpConn.getContentType();
-			//int contentLength = httpConn.getContentLength();
 
-			if( disposition != null )
-			{
-				// extracts file name from header field
-				int index = disposition.indexOf( "filename=" );
-				if( index > 0 )
-				{
-					fileName = disposition.substring( index + 10,
-							disposition.length() - 1 );
-				}
-			}
-			else
-			{
-				// extracts file name from URL
-				fileName = fileURL.substring( fileURL.lastIndexOf( "/" ) + 1,
-						fileURL.length() );
-			}
-
-			fileName = httpConn.getURL().toString().substring( httpConn.getURL().toString().lastIndexOf( "/" ) + 1 ).replace( "%20", " " );
+			fileName = connection.getURL().toString().substring( connection.getURL().toString().lastIndexOf( "/" ) + 1 ).replace( "%20", " " );
 
 			gui.addString( "Downloading " + fileName + "..." );
 
 			// opens input stream from the HTTP connection
-			InputStream inputStream = httpConn.getInputStream();
+			InputStream inputStream = connection.getInputStream();
 			String saveFilePath = saveDir + File.separator + fileName;
 
 			// opens an output stream to save into file
@@ -224,6 +205,7 @@ public class PackAssembler
 
 			int bytesRead = -1;
 			byte[] buffer = new byte[BUFFER];
+
 			while( ( bytesRead = inputStream.read( buffer ) ) != -1 )
 			{
 				outputStream.write( buffer, 0, bytesRead );
@@ -239,7 +221,7 @@ public class PackAssembler
 			gui.addLine( "No file to download. Server replied HTTP code: " + responseCode );
 			errors.add( "Error downloading file: " + fileURL );
 		}
-		httpConn.disconnect();
+		connection.disconnect();
 	}
 
 	private static String getProjectName( int project_id )
@@ -249,44 +231,38 @@ public class PackAssembler
 
 		try
 		{
-			URL oracle = new URL( project_url );
-			URLConnection yc = oracle.openConnection();
-			BufferedReader in = new BufferedReader( new InputStreamReader(
-					yc.getInputStream() ) );
-			String inputLine;
+			URL url = new URL( project_url );
+			URLConnection connection = url.openConnection();
 			boolean found = false;
 
-			while( ( inputLine = in.readLine() ) != null )
+			Pattern p1 = Pattern.compile( "\"/mc-mods/" + project_id + "-[a-zA-Z0-9-]+\"" );
+			Matcher m1 = p1.matcher( connection.getURL().toString() );
+
+			Pattern p2 = Pattern.compile( "\"/mc-mods/" + project_id + "-[a-zA-Z0-9-]+-" + project_id + "\"" );
+			Matcher m2 = p2.matcher( connection.getURL().toString() );
+
+			while( !found && m2.find() )
 			{
-				Pattern p1 = Pattern.compile( "\"/mc-mods/" + project_id + "-[a-zA-Z0-9-]+\"" );
-				Matcher m1 = p1.matcher( inputLine );
+				String partial_url = m2.group();
+				found = true;
+				//"/mc-mods/32274-journeymap-32274"
 
-				Pattern p2 = Pattern.compile( "\"/mc-mods/" + project_id + "-[a-zA-Z0-9-]+-" + project_id + "\"" );
-				Matcher m2 = p2.matcher( inputLine );
+				project_name = partial_url.substring( partial_url.indexOf( "-", 8 ) + 1, partial_url.lastIndexOf( "-" ) );
+			}
 
-				while( !found && m2.find() )
-				{
-					String partial_url = m2.group();
-					found = true;
-					//"/mc-mods/32274-journeymap-32274"
+			while( !found && m1.find() )
+			{
+				String partial_url = m1.group();
+				found = true;
+				///mc-mods/51195-railcraft
 
-					project_name = partial_url.substring( partial_url.indexOf( "-", 8 ) + 1, partial_url.lastIndexOf( "-" ) );
-				}
-
-				while( !found && m1.find() )
-				{
-					String partial_url = m1.group();
-					found = true;
-					///mc-mods/51195-railcraft
-
-					project_name = partial_url.substring( partial_url.indexOf( "-", 8 ) + 1, partial_url.length() - 1 );
-				}
+				project_name = partial_url.substring( partial_url.indexOf( "-", 8 ) + 1, partial_url.length() - 1 );
+			}
 
 
-				if( found )
-				{
-					return project_name;
-				}
+			if( found )
+			{
+				return project_name;
 			}
 		}
 		catch( MalformedURLException e )
