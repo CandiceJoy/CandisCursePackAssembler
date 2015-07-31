@@ -18,6 +18,10 @@ import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+/*
+Note: Code was borrowed from StackOverflow for downloadFile(), unzip(), and deleteDirectory()
+The code has been modified to make it work for this application.
+ */
 
 public class PackAssembler
 {
@@ -79,7 +83,7 @@ public class PackAssembler
 		pack_directory.mkdir();
 
 		gui.addString( "Unzipping..." );
-		unzipFunction( "extracted", path );
+		unzip( "extracted", path );
 		gui.addLine( "done" );
 
 		try
@@ -299,7 +303,7 @@ public class PackAssembler
 		return null;
 	}
 
-	private static void unzipFunction( String destinationFolder, String zipFile )
+	private static void unzip( String destinationFolder, String zipFile )
 	{
 		File directory = new File( destinationFolder );
 
