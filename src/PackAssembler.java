@@ -10,9 +10,11 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLConnection;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Scanner;
+import java.util.Stack;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
@@ -27,8 +29,10 @@ public class PackAssembler
 {
 	public static final int BUFFER = 2048;
 
-	public static final String EXTRACTED_DIR = "." + File.separator + "extracted";
-	public static final String PACK_DIR = "." + File.separator + "pack";
+	public static final String JAR_DIRECTORY = new File("").getAbsolutePath();
+
+	public static final String EXTRACTED_DIR = Paths.get( JAR_DIRECTORY + File.separator + "extracted" ).toString();
+	public static final String PACK_DIR = Paths.get( JAR_DIRECTORY + File.separator + "pack" ).toString();
 
 	private static final PackAssemblerGUI gui = new PackAssemblerGUI();
 	private static final ArrayList<String> errors = new ArrayList<String>();
@@ -88,9 +92,44 @@ public class PackAssembler
 
 		try
 		{
-			Files.move( Paths.get( EXTRACTED_DIR + File.separator + "Overrides" + File.separator + "mods" ), Paths.get( PACK_DIR + File.separator + "mods" ) );
-			Files.move( Paths.get( EXTRACTED_DIR + File.separator + "Overrides" + File.separator + "config" ), Paths.get( PACK_DIR + File.separator + "config" ) );
-			Files.move( Paths.get( EXTRACTED_DIR + File.separator + "Overrides" + File.separator + "scripts" ), Paths.get( PACK_DIR + File.separator + "scripts" ) );
+			File overrides_directory = new File( Paths.get( EXTRACTED_DIR + File.separator + "Overrides" ).toString() );
+
+			if( overrides_directory.exists() )
+			{
+				//Files.move( Paths.get( EXTRACTED_DIR + File.separator + "Overrides" ), Paths.get( PACK_DIR ) );
+				Stack<String> source_paths = new Stack<String>();
+
+				for( String file : new File( EXTRACTED_DIR + File.separator + "Overrides" ).list() )
+				{
+					source_paths.push( file );
+				}
+
+				while( !source_paths.isEmpty() )
+				{
+					String current_path = source_paths.pop();
+
+					File file = new File( EXTRACTED_DIR + File.separator + "Overrides" + File.separator + current_path );
+
+					if( file.isDirectory() )
+					{
+						String[] files = file.list();
+
+						for( String subdir_or_file : files )
+						{
+							source_paths.push( current_path + File.separator + subdir_or_file );
+						}
+					}
+					else
+					{
+						Path source_path = Paths.get( EXTRACTED_DIR + File.separator + "Overrides" + File.separator + current_path );
+						Path destination_path = Paths.get( PACK_DIR + File.separator + current_path );
+
+						createPathsToFile( current_path , PACK_DIR, File.separator );
+
+						Files.move( source_path, destination_path );
+					}
+				}
+			}
 		}
 		catch( IOException e )
 		{
@@ -101,7 +140,15 @@ public class PackAssembler
 		String text = null;
 		try
 		{
-			text = new Scanner( new File( "extracted" + File.separator + "manifest.json" ) ).useDelimiter( "\\A" ).next();
+			File manifest = new File( "extracted" + File.separator + "manifest.json" );
+
+			if( !manifest.exists() )
+			{
+				JOptionPane.showMessageDialog( null, "Error: Extracted manifest not found.  Please report this bug." );
+				System.exit( 0 );
+			}
+
+			text = new Scanner( manifest ).useDelimiter( "\\A" ).next();
 		}
 		catch( FileNotFoundException e )
 		{
@@ -279,6 +326,39 @@ public class PackAssembler
 		return null;
 	}
 
+	private static void createPathsToFile( String filepath, String parent, String separator )
+	{
+		if( filepath.indexOf( separator ) >= 0 )
+		{
+			Stack<File> directories_to_create = new Stack<File>();
+			String dir = filepath.substring( 0, filepath.lastIndexOf( separator ) );
+
+			do
+			{
+				File candidate_location = new File( parent + File.separator + dir );
+
+				if( !candidate_location.exists() )
+				{
+					directories_to_create.push( candidate_location );
+				}
+
+				if( dir.indexOf( separator ) >= 0 )
+				{
+					dir = dir.substring( 0, dir.lastIndexOf( separator ) );
+				}
+				else
+				{
+					dir ="";
+				}
+			}while( dir.length() > 0 );
+
+			while( !directories_to_create.isEmpty() )
+			{
+				directories_to_create.pop().mkdir();
+			}
+		}
+	}
+
 	private static void unzip( String destinationFolder, String zipFile )
 	{
 		File directory = new File( destinationFolder );
@@ -302,14 +382,16 @@ public class PackAssembler
 			while( entry != null )
 			{
 				String entryName = entry.getName();
-				File file = new File( destinationFolder + File.separator + entryName );
 
-				//gui.addLine("Unzip file " + entryName + " to " + file.getAbsolutePath());
+				createPathsToFile( entryName, EXTRACTED_DIR, "/" );
+
+				File file = new File( destinationFolder + File.separator + entryName );
 
 				// create the directories of the zip directory
 				if( entry.isDirectory() )
 				{
 					File newDir = new File( file.getAbsolutePath() );
+
 					if( !newDir.exists() )
 					{
 						boolean success = newDir.mkdirs();
